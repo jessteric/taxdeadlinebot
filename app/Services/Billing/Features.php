@@ -103,6 +103,10 @@ final class Features
         return self::isProOrHigherPlan(self::userPlan($u));
     }
 
+    /**
+     * @param TgUser|null $u
+     * @return bool
+     */
     public static function isPro(?TgUser $u): bool
     {
         return self::userPlan($u) === self::PRO;
