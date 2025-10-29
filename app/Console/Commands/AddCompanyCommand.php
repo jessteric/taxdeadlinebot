@@ -8,6 +8,7 @@ use App\Repositories\Contracts\TgUserRepositoryInterface;
 use App\Services\Telegram\BotApi;
 use App\Services\Telegram\ConversationState;
 use App\Services\Telegram\UpdateHelper;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 readonly class AddCompanyCommand
@@ -47,6 +48,8 @@ readonly class AddCompanyCommand
     /** Обработка коллбеков: ac:type:<value> */
     public function handleCallback(int|string $chatId, string $data): void
     {
+        Log::info('AC_CB', ['chatId' => $chatId, 'data' => $data]);
+
         if (!str_starts_with($data, 'ac:type:')) {
             return;
         }
