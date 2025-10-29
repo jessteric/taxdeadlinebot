@@ -8,11 +8,13 @@ use App\Repositories\Contracts\DeadlineRuleRepositoryInterface;
 use App\Repositories\Contracts\EventRepositoryInterface;
 use App\Repositories\Contracts\ObligationRepositoryInterface;
 use App\Repositories\Contracts\ReminderRepositoryInterface;
+use App\Repositories\Contracts\TaxCalculationRepositoryInterface;
 use App\Repositories\Contracts\TgUserRepositoryInterface;
 use App\Repositories\DeadlineRuleRepository;
 use App\Repositories\EventRepository;
 use App\Repositories\ObligationRepository;
 use App\Repositories\ReminderRepository;
+use App\Repositories\TaxCalculationRepository;
 use App\Repositories\TgUserRepository;
 use App\Services\Tax\PeriodParser;
 use App\Services\Tax\TaxCalculatorService;
@@ -51,6 +53,10 @@ class AppServiceProvider extends ServiceProvider
         );
         $this->app->singleton(PeriodParser::class);
         $this->app->singleton(TaxCalculatorService::class);
+        $this->app->bind(
+            TaxCalculationRepositoryInterface::class,
+            TaxCalculationRepository::class
+        );
 
     }
 

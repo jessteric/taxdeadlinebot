@@ -12,12 +12,12 @@ use App\Services\Tax\TaxCalculatorService;
 use App\Services\Telegram\BotApi;
 use App\Services\Telegram\ConversationState;
 use App\Services\Telegram\UpdateHelper;
+use Illuminate\Support\Facades\Log;
 
 readonly class TaxCommand
 {
     public function __construct(
         private CompanyRepositoryInterface $companies,
-        private TaxCalculatorService       $tax,
         private PeriodParser               $periods,
         private BotApi                     $api
     ) {}
@@ -32,7 +32,11 @@ readonly class TaxCommand
         }
 
         $state = new ConversationState($chatId);
-        $state->set(['step' => 'choose_company', 'payload' => []]);
+        $state->set([
+            'flow'    => 'tax',
+            'step'    => 'choose_company',
+            'payload' => [],
+        ]);
 
         if ($list->count() === 1) {
             /** @var Company $c */
@@ -54,6 +58,45 @@ readonly class TaxCommand
     public function continue(int|string $chatId, array $update): bool
     {
         $state = new ConversationState($chatId);
+
+        if (isset($update['callback_query']['data']) && str_starts_with($update['callback_query']['data'], 'tax.rate:')) {
+            $choice = substr($update['callback_query']['data'], strlen('tax.rate:')); // yes|no
+            $data   = $state->get()['payload'] ?? [];
+
+            Log::info('TAX_RATE_CB', [
+                'choice'      => $choice,
+                'has_period'  => isset($data['period_from'], $data['period_to'], $data['period_label']),
+                'has_income'  => isset($data['income']),
+                'has_cand'    => isset($data['candidate_rate']),
+                'company_id'  => $data['company_id'] ?? null,
+            ]);
+
+            if ($choice === 'yes') {
+                // проверяем, что всё готово к финализации
+                if (!isset($data['candidate_rate'], $data['income'], $data['period_from'], $data['period_to'], $data['period_label'])) {
+                    Log::warning('TAX_RATE_CB_INCOMPLETE_STATE', $data);
+                    $this->api->sendMessage($chatId, "Кажется, не хватает данных для расчёта. Давай начнём заново: /tax");
+                    $state->clear();
+                    return true;
+                }
+                $data['rate'] = (float)$data['candidate_rate'];
+                $state->put('payload', $data);
+
+                $this->finishAndReport($chatId, $data);
+                $state->clear();
+                return true;
+            }
+
+            // choice === 'no' → спрашиваем ставку руками
+            $company = $this->companies->findOwnedBy($chatId, (int)($data['company_id'] ?? 0));
+            $hint = $company && $company->default_tax_rate !== null
+                ? " (по умолчанию {$company->default_tax_rate}%)"
+                : '';
+            $this->api->sendMessage($chatId, "Укажи процент налога{$hint}:");
+            $state->step('ask_rate');
+            return true;
+        }
+
         $step = $state->step();
         if (!$step) return false;
 
@@ -100,7 +143,20 @@ readonly class TaxCommand
                     $state->step('confirm_rate');
                     $data['candidate_rate'] = (float)$pref->last_tax_rate;
                     $state->put('payload', $data);
-                    $this->api->sendMessage($chatId, "Ставка как в прошлый раз: {$pref->last_tax_rate}% — оставить? (да/нет)");
+
+                    $kb = [
+                        [
+                            ['text' => '✅ Да',  'callback_data' => 'tax.rate:yes'],
+                            ['text' => '✏️ Нет', 'callback_data' => 'tax.rate:no'],
+                        ],
+                    ];
+
+                    $this->api->sendMessage(
+                        $chatId,
+                        "Ставка как в прошлый раз: {$pref->last_tax_rate}% — оставить?",
+                        ['reply_markup' => ['inline_keyboard' => $kb]]
+                    );
+                    $state->step('confirm_rate');
                     return true;
                 }
 
@@ -114,7 +170,19 @@ readonly class TaxCommand
                 return true;
 
             case 'confirm_rate':
-                $yes = in_array(mb_strtolower($text), ['y','yes','да','д','угу','ok','ок'], true);
+                $norm = str_replace(',', '.', trim(mb_strtolower($text)));
+
+                // Если пользователь сразу прислал число — трактуем как новую ставку
+                if ($norm !== '' && is_numeric($norm)) {
+                    $data['rate'] = (float)$norm;
+                    $state->put('payload', $data);
+                    $this->finishAndReport($chatId, $data);
+                    $state->clear();
+                    return true;
+                }
+
+                // да/yes → берём candidate_rate
+                $yes = in_array($norm, ['y','yes','да','д','угу','ok','ок'], true);
                 if ($yes) {
                     $data['rate'] = (float)$data['candidate_rate'];
                     $state->put('payload', $data);
@@ -122,7 +190,8 @@ readonly class TaxCommand
                     $state->clear();
                     return true;
                 }
-                // нет → спросим новую ставку
+
+                // всё остальное → спросить новую ставку с подсказкой дефолта
                 $company = $this->companies->findOwnedBy($chatId, (int)$data['company_id']);
                 $hint = $company && $company->default_tax_rate !== null
                     ? " (по умолчанию {$company->default_tax_rate}%)"
@@ -133,12 +202,52 @@ readonly class TaxCommand
 
             case 'ask_rate':
                 $rate = null;
-                if (preg_match('~^\s*([0-9]+(?:[\,\.][0-9]{1,3})?)\s*\%?\s*$~', $text, $m)) {
-                    $rate = (float)str_replace(',', '.', $m[1]);
-                } else {
-                    $company = $this->companies->findOwnedBy($chatId, (int)$data['company_id']);
+                $companyId = (int)($data['company_id'] ?? 0);
+                $company = $this->companies->findOwnedBy($chatId, $companyId);
+
+                Log::info('TAX_ASK_RATE_INPUT', [
+                    'chat_id'        => (string)$chatId,
+                    'company_id'     => $companyId,
+                    'text_raw'       => $text,
+                    'default_present'=> $company?->default_tax_rate !== null,
+                    'default_value'  => $company?->default_tax_rate,
+                ]);
+
+                // 1) Пустой ввод → пробуем дефолт компании
+                if ($text === '') {
                     if ($company && $company->default_tax_rate !== null) {
                         $rate = (float)$company->default_tax_rate;
+                        Log::info('TAX_ASK_RATE_TAKE_DEFAULT_ON_EMPTY', [
+                            'chat_id'    => (string)$chatId,
+                            'company_id' => $companyId,
+                            'rate'       => $rate,
+                        ]);
+                    }
+                }
+                // 2) Пользователь ввёл число → берём его
+                elseif (preg_match('~^\s*([0-9]+(?:[,.][0-9]{1,3})?)\s*%?\s*$~u', $text, $m)) {
+                    $rate = (float)str_replace(',', '.', $m[1]);
+                    Log::info('TAX_ASK_RATE_TAKE_USER_INPUT', [
+                        'chat_id'    => (string)$chatId,
+                        'company_id' => $companyId,
+                        'rate'       => $rate,
+                    ]);
+                }
+                // 3) Иначе → fallback к дефолту компании, если есть
+                else {
+                    if ($company && $company->default_tax_rate !== null) {
+                        $rate = (float)$company->default_tax_rate;
+                        Log::info('TAX_ASK_RATE_FALLBACK_DEFAULT', [
+                            'chat_id'    => (string)$chatId,
+                            'company_id' => $companyId,
+                            'rate'       => $rate,
+                        ]);
+                    } else {
+                        Log::warning('TAX_ASK_RATE_NO_MATCH_AND_NO_DEFAULT', [
+                            'chat_id'    => (string)$chatId,
+                            'company_id' => $companyId,
+                            'text_raw'   => $text,
+                        ]);
                     }
                 }
 
@@ -146,6 +255,12 @@ readonly class TaxCommand
                     $this->api->sendMessage($chatId, "Укажи процент, например: 2 или 2.5");
                     return true;
                 }
+
+                Log::info('TAX_ASK_RATE_FINAL', [
+                    'chat_id'    => (string)$chatId,
+                    'company_id' => $companyId,
+                    'rate'       => $rate,
+                ]);
 
                 $data['rate'] = $rate;
                 $state->put('payload', $data);
@@ -198,6 +313,23 @@ readonly class TaxCommand
 
     private function finishAndReport(int|string $chatId, array $data): void
     {
+        Log::info('TAX_FINISH_INPUT', [
+            'company_id'   => $data['company_id'] ?? null,
+            'period_from'  => $data['period_from'] ?? null,
+            'period_to'    => $data['period_to'] ?? null,
+            'period_label' => $data['period_label'] ?? null,
+            'income'       => $data['income'] ?? null,
+            'rate'         => $data['rate'] ?? null,
+        ]);
+
+        foreach (['company_id','period_from','period_to','period_label','income','rate'] as $k) {
+            if (!isset($data[$k])) {
+                $this->api->sendMessage($chatId, "Не хватает данных для расчёта ({$k}). Давай начнём заново: /tax");
+                Log::warning('TAX_MISSING_FIELD_BEFORE_CREATE', ['missing' => $k, 'payload' => $data]);
+                return;
+            }
+        }
+
         $company = $this->companies->findOwnedBy($chatId, (int)$data['company_id']);
         if (!$company) {
             $this->api->sendMessage($chatId, "Компания не найдена.");
@@ -210,6 +342,20 @@ readonly class TaxCommand
         // Сохраним историю
         $u = TgUser::query()->byTelegramId($chatId)->first();
         if ($u) {
+            Log::info('TAX_CREATE_PAYLOAD', [
+                'payload' => [
+                    'tg_user_id'   => $u->id,
+                    'company_id'   => $company->id,
+                    'period_from'  => $data['period_from'] ?? null,
+                    'period_to'    => $data['period_to'] ?? null,
+                    'period_label' => $data['period_label'] ?? null,
+                    'income'       => $res['income'] ?? null,
+                    'rate'         => $res['rate'] ?? null,
+                    'pay_amount'   => $res['pay_amount'] ?? null,
+                    'pay_currency' => $res['pay_currency'] ?? null,
+                ],
+            ]);
+
             TaxCalculation::create([
                 'tg_user_id'   => $u->id,
                 'company_id'   => $company->id,

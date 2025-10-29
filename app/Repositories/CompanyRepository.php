@@ -69,4 +69,14 @@ class CompanyRepository implements CompanyRepositoryInterface
         return (bool)$c?->delete();
 
     }
+
+    public function updateCurrency(int $companyId, string $currency): void
+    {
+        Company::query()->whereKey($companyId)->update(['currency' => strtoupper($currency)]);
+    }
+
+    public function updateDefaultRate(int $companyId, ?float $rate): void
+    {
+        Company::query()->whereKey($companyId)->update(['default_tax_rate' => $rate]);
+    }
 }

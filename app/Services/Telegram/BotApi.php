@@ -40,4 +40,27 @@ class BotApi
 
         return $resp->json();
     }
+
+    public function setMyCommands(array $commands, ?string $languageCode = null): array
+    {
+        $payload = [
+            'commands' => array_map(function ($c) {
+                return [
+                    'command'     => (string)($c['command'] ?? ''),
+                    'description' => (string)($c['description'] ?? ''),
+                ];
+            }, $commands),
+        ];
+
+        if ($languageCode) {
+            $payload['language_code'] = $languageCode;
+        }
+
+        $resp = Http::asJson()->post(
+            "https://api.telegram.org/bot{$this->token}/setMyCommands",
+            $payload
+        );
+
+        return $resp->json();
+    }
 }
