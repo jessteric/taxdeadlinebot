@@ -1,0 +1,39 @@
+obligations:
+  - code: AM_VAT_MONTHLY
+    title: VAT monthly return
+    description: Monthly VAT return (demo)
+    country_code: AM
+    rules:
+      - regime: monthly
+        rrule: {}
+        due_day: 20
+        due_shift: next_business_day
+        grace_days: 0
+        holiday_calendar_code: AM
+        is_active: true
+
+  - code: AM_VAT_QUARTERLY
+    title: VAT quarterly return
+    description: Quarterly VAT return (demo)
+    country_code: AM
+    rules:
+      - regime: quarterly
+        rrule: {}
+        due_day: 20
+        due_shift: next_business_day
+        grace_days: 0
+        holiday_calendar_code: AM
+        is_active: true
+
+  - code: AM_PAYROLL_MONTHLY
+    title: Payroll & social contributions
+    description: Monthly payroll/social contributions (demo)
+    country_code: AM
+    rules:
+      - regime: monthly
+        rrule: {}
+        due_day: 15
+        due_shift: next_business_day
+        grace_days: 0
+        holiday_calendar_code: AM
+        is_active: true

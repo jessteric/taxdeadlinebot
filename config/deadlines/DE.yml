@@ -1,0 +1,39 @@
+obligations:
+  - code: DE_VAT_MONTHLY
+    title: VAT monthly return
+    description: Monthly VAT return (demo)
+    country_code: DE
+    rules:
+      - regime: monthly
+        rrule: {}
+        due_day: 10
+        due_shift: next_business_day
+        grace_days: 0
+        holiday_calendar_code: DE
+        is_active: true
+
+  - code: DE_VAT_QUARTERLY
+    title: VAT quarterly return
+    description: Quarterly VAT return (demo)
+    country_code: DE
+    rules:
+      - regime: quarterly
+        rrule: {}
+        due_day: 10
+        due_shift: next_business_day
+        grace_days: 0
+        holiday_calendar_code: DE
+        is_active: true
+
+  - code: DE_PAYROLL_MONTHLY
+    title: Payroll & social contributions
+    description: Monthly payroll/social contributions (demo)
+    country_code: DE
+    rules:
+      - regime: monthly
+        rrule: {}
+        due_day: 15
+        due_shift: next_business_day
+        grace_days: 0
+        holiday_calendar_code: DE
+        is_active: true

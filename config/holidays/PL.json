@@ -1,0 +1,11 @@
+{
+    "country_code": "PL",
+    "years": {
+        "2025": [
+            {"date": "2025-01-01", "name": "New Year"},
+            {"date": "2025-05-01", "name": "Labour Day"},
+            {"date": "2025-05-03", "name": "Constitution Day"},
+            {"date": "2025-12-25", "name": "Christmas Day"}
+        ]
+    }
+}

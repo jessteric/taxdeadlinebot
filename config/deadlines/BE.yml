@@ -1,0 +1,20 @@
+obligations:
+  - code: BE_VAT_RETURN
+    title: "VAT Return"
+    description: "Monthly or quarterly VAT return"
+    rules:
+      - regime: monthly
+        rrule:
+          freq: monthly
+          anchor: month_end_plus
+          anchorDays: 20
+        due_shift: next_business
+        holiday_calendar_code: BE
+      - regime: quarterly
+        rrule:
+          freq: quarterly
+          byMonth: [3,6,9,12]
+          anchor: month_end_plus
+          anchorDays: 20
+        due_shift: next_business
+        holiday_calendar_code: BE

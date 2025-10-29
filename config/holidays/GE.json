@@ -1,0 +1,12 @@
+{
+    "country_code": "GE",
+    "years": {
+        "2025": [
+            {"date": "2025-01-01", "name": "New Year"},
+            {"date": "2025-01-07", "name": "Orthodox Christmas"},
+            {"date": "2025-05-26", "name": "Independence Day"},
+            {"date": "2025-08-28", "name": "Saint Mary Day"},
+            {"date": "2025-12-31", "name": "New Year's Eve"}
+        ]
+    }
+}
