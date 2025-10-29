@@ -9,7 +9,9 @@ interface CompanyRepositoryInterface
 {
     public function createForUser(int $userId, array $data): Company;
     public function listForTelegram(int|string $chatId): Collection;
-
     public function findOwnedBy(int|string $chatId, int $companyId): ?Company;
     public function deleteOwnedBy(int|string $chatId, int $companyId): bool;
+    public function updateCurrency(int $companyId, string $currency): void;
+    public function updateDefaultRate(int $companyId, ?float $rate): void;
+
 }

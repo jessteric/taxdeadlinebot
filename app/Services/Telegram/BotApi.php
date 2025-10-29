@@ -40,4 +40,47 @@ class BotApi
 
         return $resp->json();
     }
+
+    public function setMyCommands(array $commands, ?string $languageCode = null): array
+    {
+        $payload = [
+            'commands' => array_map(function ($c) {
+                return [
+                    'command'     => (string)($c['command'] ?? ''),
+                    'description' => (string)($c['description'] ?? ''),
+                ];
+            }, $commands),
+        ];
+
+        if ($languageCode) {
+            $payload['language_code'] = $languageCode;
+        }
+
+        $resp = Http::asJson()->post(
+            "https://api.telegram.org/bot{$this->token}/setMyCommands",
+            $payload
+        );
+
+        return $resp->json();
+    }
+
+    public function sendDocument(int|string $chatId, string $filename, string $contents, array $params = []): array
+    {
+        $multipart = [
+            ['name' => 'chat_id', 'contents' => (string)$chatId],
+            ['name' => 'document', 'contents' => $contents, 'filename' => $filename],
+        ];
+        foreach ($params as $k => $v) {
+            $multipart[] = [
+                'name' => $k,
+                'contents' => is_scalar($v) ? (string)$v : json_encode($v, JSON_UNESCAPED_UNICODE)
+            ];
+        }
+
+        $resp = Http::asMultipart()
+            ->post("https://api.telegram.org/bot{$this->token}/sendDocument", $multipart);
+
+        return $resp->json();
+    }
+
 }

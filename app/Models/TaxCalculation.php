@@ -3,22 +3,31 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TaxCalculation extends Model
 {
-    protected $fillable = [
-        'tg_user_id','company_id',
-        'period_from','period_to','period_label',
-        'income','rate','pay_amount','pay_currency',
-    ];
+    protected $table = 'tax_calculations';
+
+    protected $guarded = [];
 
     protected $casts = [
-        'period_from' => 'immutable_date',
-        'period_to'   => 'immutable_date',
-        'income'      => 'decimal:2',
-        'rate'        => 'decimal:3',
-        'pay_amount'  => 'decimal:2',
-        'created_at'  => 'immutable_datetime',
-        'updated_at'  => 'immutable_datetime',
+        'period_from' => 'datetime',
+        'period_to'   => 'datetime',
+        'income'      => 'float',
+        'rate'        => 'float',
+        'pay_amount'  => 'float',
     ];
+
+    public $timestamps = true;
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(TgUser::class, 'tg_user_id');
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'company_id');
+    }
 }

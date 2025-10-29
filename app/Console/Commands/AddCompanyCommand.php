@@ -18,20 +18,62 @@ readonly class AddCompanyCommand
         private BotApi                     $api
     ) {}
 
+    /** /addcompany — старт с кнопками типа субъекта */
     public function startFlow(int|string $chatId): void
     {
         $state = new ConversationState($chatId);
         $state->set([
-            'step' => 'ask_subject_type',
+            'step' => 'wait_type',
             'payload' => [],
         ]);
 
-        $this->api->sendMessage($chatId, __('bot.addcompany.ask_subject_type'));
+        $kb = [
+            [
+                ['text' => __('bot.addcompany.type_company'),       'callback_data' => 'ac:type:company'],
+            ],
+            [
+                ['text' => __('bot.addcompany.type_sole_prop'),     'callback_data' => 'ac:type:sole_prop'],
+            ],
+            [
+                ['text' => __('bot.addcompany.type_self_employed'), 'callback_data' => 'ac:type:self_employed'],
+            ],
+        ];
+
+        $this->api->sendMessage($chatId, __('bot.addcompany.who'), [
+            'reply_markup' => ['inline_keyboard' => $kb],
+        ]);
     }
 
-    /** Call on every update if state is set */
+    /** Обработка коллбеков: ac:type:<value> */
+    public function handleCallback(int|string $chatId, string $data): void
+    {
+        if (!str_starts_with($data, 'ac:type:')) {
+            return;
+        }
+        $type = substr($data, strlen('ac:type:'));
+
+        $state = new ConversationState($chatId);
+        $cur = $state->get() ?? ['step' => null, 'payload' => []];
+        $payload = $cur['payload'] ?? [];
+        $payload['subject_type'] = $type;
+
+        $state->set([
+            'step'    => 'ask_name',
+            'payload' => $payload,
+        ]);
+
+        $this->api->sendMessage($chatId, __('bot.addcompany.ask_name'));
+    }
+
+    /** Текстовые шаги */
     public function continueFlow(int|string $chatId, array $update): bool
     {
+        // не перехватываем новые /команды
+        $incomingText = trim((string)($update['message']['text'] ?? ''));
+        if ($incomingText !== '' && str_starts_with($incomingText, '/')) {
+            return false;
+        }
+
         $state = new ConversationState($chatId);
         $step = $state->step();
         if (!$step) return false;
@@ -40,17 +82,9 @@ readonly class AddCompanyCommand
         $data = $state->get()['payload'] ?? [];
 
         switch ($step) {
-            case 'ask_subject_type':
-                $allowedTypes = ['company','sole_prop','self_employed'];
-                $type = strtolower($text);
-                if (!in_array($type, $allowedTypes, true)) {
-                    $this->api->sendMessage($chatId, __('bot.addcompany.ask_subject_type_invalid'));
-                    return true;
-                }
-                $data['subject_type'] = $type;
-                $state->put('payload', $data);
-                $state->step('ask_name');
-                $this->api->sendMessage($chatId, __('bot.addcompany.start')); // "Please send the company name:"
+            case 'wait_type':
+                // Если вместо нажатия кнопки пользователь что-то напишет — просим выбрать кнопками.
+                $this->api->sendMessage($chatId, __('bot.addcompany.who'));
                 return true;
 
             case 'ask_name':
@@ -59,26 +93,6 @@ readonly class AddCompanyCommand
                     return true;
                 }
                 $data['name'] = Str::limit($text, 120, '');
-
-                // если это не company — спросим персональное имя отдельно (можно отличить бренд/название и ФИО)
-                if (($data['subject_type'] ?? 'company') !== 'company' && empty($data['person_name'])) {
-                    $state->put('payload', $data);
-                    $state->step('ask_person_name');
-                    $this->api->sendMessage($chatId, __('bot.addcompany.ask_person_name'));
-                    return true;
-                }
-
-                $state->put('payload', $data);
-                $state->step('ask_country');
-                $this->api->sendMessage($chatId, __('bot.addcompany.ask_country'));
-                return true;
-
-            case 'ask_person_name':
-                if ($text === '' || str_starts_with($text, '/')) {
-                    $this->api->sendMessage($chatId, __('bot.addcompany.ask_person_name'));
-                    return true;
-                }
-                $data['person_name'] = Str::limit($text, 160, '');
                 $state->put('payload', $data);
                 $state->step('ask_country');
                 $this->api->sendMessage($chatId, __('bot.addcompany.ask_country'));
@@ -119,16 +133,6 @@ readonly class AddCompanyCommand
                 $data['timezone'] = $text;
                 $state->put('payload', $data);
 
-                if (!isset($data['tax_id'])) {
-                    $state->step('ask_tax_id');
-                    $this->api->sendMessage($chatId, __('bot.addcompany.ask_tax_id'));
-                    return true;
-                }
-
-            case 'ask_tax_id':
-                $data['tax_id'] = ($text === '-' ? null : Str::limit($text, 64, ''));
-                $state->put('payload', $data);
-
                 // persist
                 $user = $this->users->findByTelegramId($chatId);
                 if (!$user instanceof TgUser) {
@@ -142,8 +146,7 @@ readonly class AddCompanyCommand
                 $company = $this->companies->createForUser($user->id, $data);
                 $state->clear();
 
-                $this->api->sendMessage(
-                    $chatId,
+                $this->api->sendMessage($chatId,
                     __('bot.addcompany.saved', [
                         'name'    => $company->name,
                         'country' => $company->country_code,
