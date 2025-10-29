@@ -90,6 +90,7 @@ class TaxHistoryCommand
         $lines = [];
         $lines[] = "Последние расчёты:";
         foreach ($rows as $r) {
+            // Период: сначала пробуем period_label, если пусто — формируем из дат
             $period = $r->period_label;
             if (!$period) {
                 $from = $r->period_from?->format('Y-m-d');
