@@ -31,4 +31,8 @@ return [
     'plan_starter'  => 'Starter - €2.90/мес | €29.58/год (-15%)',
     'plan_pro'      => 'Pro - €4.90/мес | €49.98/год (-15%)',
     'plan_business' => 'Business - €14.90/мес | €151.26/год (-15%)',
+    'company_limit_reached' => 'Лимит компаний для вашего плана исчерпан (лимит: :limit).',
+    'upgrade_hint'          => 'Чтобы увеличить лимиты, перейдите на PRO/Business.',
+    'upgrade_to_pro_button' => 'Апгрейд до PRO',
+    'details_button'        => 'Подробнее о тарифах',
 ];

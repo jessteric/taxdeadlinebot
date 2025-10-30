@@ -7,6 +7,8 @@ use App\Models\TaxCalculation;
 use App\Models\TgUser;
 use App\Models\UserCompanyTaxPref;
 use App\Repositories\Contracts\CompanyRepositoryInterface;
+use App\Services\Billing\Features;
+use App\Services\FX\FxRates;
 use App\Services\Tax\PeriodParser;
 use App\Services\Tax\TaxCalculatorService;
 use App\Services\Telegram\BotApi;
@@ -129,39 +131,74 @@ readonly class TaxCommand
                 return true;
 
             case 'ask_income':
-                if (!preg_match('~^\s*([0-9]+(?:[\,\.][0-9]{1,2})?)\s*$~u', $text, $m)) {
-                    $this->api->sendMessage($chatId, "Введите сумму дохода, например: 2500");
+                $norm = trim(preg_replace('~\s+~', ' ', $text));
+                $amount = null;
+                $inputCur = null;
+
+                // 1) Попробуем шаблон "число [валюта]"
+                if (preg_match('~^\s*([0-9]+(?:[.,][0-9]{1,2})?)\s*([A-Za-z]{3})?\s*$~u', $norm, $m)) {
+                    $amount = (float)str_replace(',', '.', $m[1]);
+                    $inputCur = isset($m[2]) ? strtoupper($m[2]) : null;
+                }
+
+                if ($amount === null || $amount <= 0) {
+                    $this->api->sendMessage($chatId, "Введите сумму дохода (например: 2500 или 2500 USD)");
                     return true;
                 }
-                $amount = (float)str_replace(',', '.', $m[1]);
-                $data['income'] = $amount;
-                $state->put('payload', $data);
 
-                // подсказка прошлой ставки
+                // Валюта компании
+                $company = $this->companies->findOwnedBy($chatId, (int)$data['company_id']);
+                $companyCur = $company?->pay_currency ?: 'EUR';
+
+                // Если пользователь ввёл валюту и она отличается от валюты компании — конвертируем, если фича включена
+                if ($inputCur && $inputCur !== strtoupper($companyCur)) {
+                    $u = TgUser::query()->byTelegramId($chatId)->first();
+                    if (!Features::fxEnabledFor($u)) {
+                        $this->api->sendMessage($chatId,
+                            "Мультивалютность доступна на планах PRO и Business. Сейчас расчёт возможен только в валюте компании ({$companyCur}). Введите сумму без указания валюты."
+                        );
+                        return true;
+                    }
+
+                    try {
+                        $fx = app(FxRates::class);
+                        $converted = $fx->convert($amount, $inputCur, $companyCur);
+                        $data['income'] = round($converted, 2);
+                        $state->put('payload', $data);
+
+                        $this->api->sendMessage($chatId,
+                            "Сконвертировал {$amount} {$inputCur} → {$data['income']} {$companyCur} по внутреннему курсу."
+                        );
+                    } catch (\Throwable $e) {
+                        $this->api->sendMessage($chatId,
+                            "Не удалось сконвертировать валюту {$inputCur} в {$companyCur}. Введите сумму в валюте компании."
+                        );
+                        return true;
+                    }
+                } else {
+                    $data['income'] = $amount;
+                    $state->put('payload', $data);
+                }
+
+                // Далее — как было: предлагаем прошлую/дефолтную ставку
                 $pref = $this->loadPref($chatId, (int)$data['company_id']);
                 if ($pref && $pref->last_tax_rate !== null) {
                     $state->step('confirm_rate');
+
+                    // Кнопки "Оставить / Ввести заново"
+                    $kb = [[
+                        ['text' => 'Оставить', 'callback_data' => 'tax.rate:yes'],
+                        ['text' => 'Ввести заново', 'callback_data' => 'tax.rate:no'],
+                    ]];
+
                     $data['candidate_rate'] = (float)$pref->last_tax_rate;
                     $state->put('payload', $data);
-
-                    $kb = [
-                        [
-                            ['text' => '✅ Да',  'callback_data' => 'tax.rate:yes'],
-                            ['text' => '✏️ Нет', 'callback_data' => 'tax.rate:no'],
-                        ],
-                    ];
-
-                    $this->api->sendMessage(
-                        $chatId,
-                        "Ставка как в прошлый раз: {$pref->last_tax_rate}% — оставить?",
-                        ['reply_markup' => ['inline_keyboard' => $kb]]
-                    );
-                    $state->step('confirm_rate');
+                    $this->api->sendMessage($chatId, "Ставка как в прошлый раз: {$pref->last_tax_rate}% — оставить?", [
+                        'reply_markup' => ['inline_keyboard' => $kb],
+                    ]);
                     return true;
                 }
 
-                // иначе — спросим ставку (с хинтом из company->default_tax_rate)
-                $company = $this->companies->findOwnedBy($chatId, (int)$data['company_id']);
                 $hint = $company && $company->default_tax_rate !== null
                     ? " (по умолчанию {$company->default_tax_rate}%)"
                     : '';

@@ -29,6 +29,7 @@ return [
         'type_sole_prop' => "ИП",
         'type_self_employed' => "Самозанятый",
         'ask_name' => "Введите название/ФИО:",
+        'ask_country_buttons' => 'Выберите страну'
     ],
 
     'next' => [

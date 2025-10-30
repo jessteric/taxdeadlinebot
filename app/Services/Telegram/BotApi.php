@@ -64,23 +64,27 @@ class BotApi
         return $resp->json();
     }
 
-    public function sendDocument(int|string $chatId, string $filename, string $contents, array $params = []): array
+    public function sendDocument(int|string $chatId, string $absolutePath, ?string $caption = null, array $opts = []): void
     {
+        $token = config('services.telegram.bot_token');
+
         $multipart = [
             ['name' => 'chat_id', 'contents' => (string)$chatId],
-            ['name' => 'document', 'contents' => $contents, 'filename' => $filename],
+            ['name' => 'document', 'contents' => fopen($absolutePath, 'r'), 'filename' => basename($absolutePath)],
         ];
-        foreach ($params as $k => $v) {
-            $multipart[] = [
-                'name' => $k,
-                'contents' => is_scalar($v) ? (string)$v : json_encode($v, JSON_UNESCAPED_UNICODE)
-            ];
+        if ($caption) {
+            $multipart[] = ['name' => 'caption', 'contents' => $caption];
+        }
+        foreach ($opts as $k => $v) {
+            $multipart[] = ['name' => $k, 'contents' => is_string($v) ? $v : json_encode($v)];
         }
 
-        $resp = Http::asMultipart()
-            ->post("https://api.telegram.org/bot{$this->token}/sendDocument", $multipart);
-
-        return $resp->json();
+        Http::asMultipart()
+            ->attach('document', fopen($absolutePath, 'r'), basename($absolutePath))
+            ->post("https://api.telegram.org/bot{$token}/sendDocument", [
+                'chat_id' => (string)$chatId,
+                'caption' => $caption,
+            ]);
     }
 
 }

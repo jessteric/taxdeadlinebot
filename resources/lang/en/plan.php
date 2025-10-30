@@ -31,4 +31,8 @@ return [
     'plan_starter'  => 'Starter - €2.90/mo | €29.58/yr (-15%)',
     'plan_pro'      => 'Pro - €4.90/mo | €49.98/yr (-15%)',
     'plan_business' => 'Business - €14.90/mo | €151.26/yr (-15%)',
+    'company_limit_reached' => 'Your plan company limit is reached (limit: :limit).',
+    'upgrade_hint'          => 'Upgrade to PRO/Business to increase limits.',
+    'upgrade_to_pro_button' => 'Upgrade to PRO',
+    'details_button'        => 'See plans',
 ];

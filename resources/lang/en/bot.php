@@ -29,6 +29,7 @@ return [
         'type_sole_prop' => "Sole proprietor/Individual entrepreneur",
         'type_self_employed' => "Self-employed",
         'ask_name' => "Send company name / full name:",
+        'ask_country_buttons' => 'Choose country'
     ],
 
     'next' => [

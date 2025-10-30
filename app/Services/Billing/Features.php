@@ -20,6 +20,13 @@ final class Features
 
     public static function userPlan(?TgUser $u): string
     {
+        if (app()->environment('local')) {
+            $override = config('billing.dev.force_plan');
+            if (is_string($override) && $override !== '') {
+                return self::norm($override);
+            }
+        }
+
         $p = $u?->plan ?: self::FREE;
         return self::norm($p);
     }
@@ -30,7 +37,7 @@ final class Features
             self::FREE     => 5,
             self::STARTER  => 100,
             self::PRO,
-            self::BUSINESS => 10_000_000, // практич. безлимит
+            self::BUSINESS => 10_000_000,
         };
     }
 
@@ -78,9 +85,11 @@ final class Features
         return self::historyLimitByPlan(self::userPlan($u));
     }
 
-    public static function csvExportEnabledFor(?TgUser $u): bool
+    public static function exportEnabledFor(?TgUser $u): bool
     {
-        return self::csvExportEnabled(self::userPlan($u));
+        $byPlan = self::exportEnabled(self::userPlan($u));
+        $flag   = app()->environment('local') && config('billing.dev.flags.export');
+        return $byPlan || $flag;
     }
 
     public static function pdfExportEnabledFor(?TgUser $u): bool
@@ -88,14 +97,11 @@ final class Features
         return self::pdfExportEnabled(self::userPlan($u));
     }
 
-    public static function exportEnabledFor(?TgUser $u): bool
-    {
-        return self::exportEnabled(self::userPlan($u));
-    }
-
     public static function fxEnabledFor(?TgUser $u): bool
     {
-        return self::fxEnabled(self::userPlan($u));
+        $byPlan = self::fxEnabled(self::userPlan($u));
+        $flag   = app()->environment('local') && config('billing.dev.flags.fx');
+        return $byPlan || $flag;
     }
 
     public static function isProOrHigher(?TgUser $u): bool
@@ -110,5 +116,30 @@ final class Features
     public static function isPro(?TgUser $u): bool
     {
         return self::userPlan($u) === self::PRO;
+    }
+
+    public static function companyLimitByPlan(string $plan): int
+    {
+        return match (self::norm($plan)) {
+            self::FREE     => 1,
+            self::STARTER  => 2,
+            self::PRO      => 10,
+            self::BUSINESS => 50,
+        };
+    }
+
+    public static function companyLimitLabel(string $plan): string
+    {
+        return match (self::norm($plan)) {
+            self::FREE     => '1',
+            self::STARTER  => '2',
+            self::PRO      => '10',
+            self::BUSINESS => '50',
+        };
+    }
+
+    public static function companyLimitFor(?TgUser $u): int
+    {
+        return self::companyLimitByPlan(self::userPlan($u));
     }
 }

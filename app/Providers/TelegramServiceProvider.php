@@ -36,7 +36,7 @@ class TelegramServiceProvider extends ServiceProvider
                 })
                 ->onCallbackPrefix('ac:', function ($u) use ($app) {
                     $app->make(AddCompanyCommand::class)
-                        ->handleCallback($u->chatId, (string)$u->callbackData);
+                        ->handleCallback($u->chatId, $u->callbackData);
                 })
                 ->onCallbackPrefix('cur:', function ($u) use ($app) {
                     $app->make(SetCurrencyCommand::class)->handle($u->chatId, $u->raw);
@@ -66,6 +66,10 @@ class TelegramServiceProvider extends ServiceProvider
                 })
                 ->onCallbackPrefix('plan:', function ($u) use ($app) {
                     $app->make(PlanCommand::class)
+                        ->handleCallback($u->chatId, $u->raw);
+                })
+                ->onCallbackPrefix('export:', function ($u) use ($app) {
+                    $app->make(ExportCommand::class)
                         ->handleCallback($u->chatId, $u->raw);
                 });
 
