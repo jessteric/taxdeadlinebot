@@ -5,7 +5,9 @@ namespace App\Providers;
 use App\Console\Commands\AddCompanyCommand;
 use App\Console\Commands\CompaniesCommand;
 use App\Console\Commands\CompanyActionsHandler;
+use App\Models\TgUser;
 use App\Services\Telegram\BotApi;
+use App\Services\Telegram\CommandListRenderer;
 use App\Services\Telegram\UpdateParser;
 use App\Services\Telegram\UpdateRouter;
 use App\UseCases\Telegram\Commands\ExportCommand;
@@ -76,10 +78,20 @@ class TelegramServiceProvider extends ServiceProvider
             // ====== COMMANDS ======
             $router
                 ->onCommand('start', function ($u) use ($app) {
-                    $app->make(BotApi::class)->sendMessage($u->chatId, __('bot.welcome'));
+                    $tgUser = TgUser::query()->byTelegramId($u->chatId)->first();
+                    if ($tgUser && $tgUser->locale) {
+                        app()->setLocale($tgUser->locale);
+                    }
+                    $text = $app->make(CommandListRenderer::class)->renderFor($tgUser);
+                    $app->make(BotApi::class)->sendMessage($u->chatId, $text);
                 })
                 ->onCommand('help', function ($u) use ($app) {
-                    $app->make(BotApi::class)->sendMessage($u->chatId, __('bot.welcome'));
+                    $tgUser = TgUser::query()->byTelegramId($u->chatId)->first();
+                    if ($tgUser && $tgUser->locale) {
+                        app()->setLocale($tgUser->locale);
+                    }
+                    $text = $app->make(CommandListRenderer::class)->renderFor($tgUser);
+                    $app->make(BotApi::class)->sendMessage($u->chatId, $text);
                 })
                 ->onCommand('addcompany', function ($u) use ($app) {
                     $app->make(AddCompanyCommand::class)->startFlow($u->chatId);

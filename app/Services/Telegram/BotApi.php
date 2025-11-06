@@ -64,27 +64,52 @@ class BotApi
         return $resp->json();
     }
 
-    public function sendDocument(int|string $chatId, string $absolutePath, ?string $caption = null, array $opts = []): void
+    public function sendDocument(int|string $chatId, string $absolutePath, string $caption = ''): void
     {
         $token = config('services.telegram.bot_token');
 
-        $multipart = [
-            ['name' => 'chat_id', 'contents' => (string)$chatId],
-            ['name' => 'document', 'contents' => fopen($absolutePath, 'r'), 'filename' => basename($absolutePath)],
-        ];
-        if ($caption) {
-            $multipart[] = ['name' => 'caption', 'contents' => $caption];
-        }
-        foreach ($opts as $k => $v) {
-            $multipart[] = ['name' => $k, 'contents' => is_string($v) ? $v : json_encode($v)];
+        if (!$token) {
+            Log::error('TG_DOC_FAIL', ['reason' => 'empty_token']);
+            $this->sendMessage($chatId, "Не удалось отправить файл (нет токена).");
+            return;
         }
 
-        Http::asMultipart()
-            ->attach('document', fopen($absolutePath, 'r'), basename($absolutePath))
-            ->post("https://api.telegram.org/bot{$token}/sendDocument", [
-                'chat_id' => (string)$chatId,
-                'caption' => $caption,
+        if (!is_file($absolutePath) || filesize($absolutePath) === 0) {
+            Log::error('TG_DOC_FAIL', ['reason' => 'file_missing_or_empty', 'path' => $absolutePath]);
+            $this->sendMessage($chatId, "Файл экспорта не найден или пустой.");
+            return;
+        }
+
+        $url = "https://api.telegram.org/bot{$token}/sendDocument";
+
+        try {
+            $resp = \Illuminate\Support\Facades\Http::timeout(30)
+                ->withOptions(['verify' => false])
+                ->attach('document', fopen($absolutePath, 'r'), basename($absolutePath))
+                ->post($url, [
+                    'chat_id' => (string)$chatId,
+                    'caption' => $caption,
+                ]);
+
+            Log::info('TG_SEND_DOCUMENT_RESP', [
+                'status' => $resp->status(),
+                'body'   => $resp->body(),
             ]);
-    }
 
+            if (!$resp->ok()) {
+                $this->sendMessage($chatId, "Не удалось отправить файл (HTTP {$resp->status()}).");
+                return;
+            }
+
+            $json = $resp->json();
+            if (!is_array($json) || empty($json['ok'])) {
+                $desc = is_array($json) ? ($json['description'] ?? 'unknown') : 'no_json';
+                $this->sendMessage($chatId, "Не удалось отправить файл: {$desc}");
+                return;
+            }
+        } catch (\Throwable $e) {
+            Log::error('TG_SEND_DOCUMENT_FAIL', ['e' => $e->getMessage()]);
+            $this->sendMessage($chatId, "Не удалось отправить файл.");
+        }
+    }
 }

@@ -13,15 +13,13 @@ final class CommandListRenderer
         $export = Features::exportEnabled($plan);
 
         $title  = __('commands.title');
-        $items  = __('commands.items'); // array
+        $items  = __('commands.items');
 
-        // Базовый перечень:
         $keys = [
             'addcompany','companies','next','tax','tax_history',
             'setcurrency','setrate_default','reminders','plan','features',
         ];
 
-        // Добавляем /export только если доступен по плану
         if ($export) {
             $keys[] = 'export';
         }
